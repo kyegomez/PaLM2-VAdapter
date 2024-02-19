@@ -517,7 +517,16 @@ class PaLM2VAdapter(nn.Module):
         # Embedding
         self.embed = nn.Embedding(num_tokens, dim)
 
-    def forward(self, text: Tensor, igmg: Tensor, *args, **kwargs):
+    def forward(
+        self,
+        text: Tensor,
+        img: Tensor,
+        video: Tensor,
+        *args,
+        **kwargs,
+    ):
+        # TODO: Add video processing
+        
         # Embed the text
         text = self.embed(text)
 
