@@ -10,7 +10,7 @@ This model uses a perceiver resampler with a depth of 1 + a tiny palm to efficie
 
 
 ## usage
-```
+```python
 import torch
 from palm_vadapter.main import PaLM2VAdapter
 
@@ -43,3 +43,15 @@ print(out.shape)
 
 # License
 MIT
+
+## Citation
+```bibtex
+@misc{xiao2024palm2vadapter,
+    title={PaLM2-VAdapter: Progressively Aligned Language Model Makes a Strong Vision-language Adapter}, 
+    author={Junfei Xiao and Zheng Xu and Alan Yuille and Shen Yan and Boyu Wang},
+    year={2024},
+    eprint={2402.10896},
+    archivePrefix={arXiv},
+    primaryClass={cs.CV}
+}
+```
