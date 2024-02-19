@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import einsum, nn, Tensor
 from zeta.structs import ViTransformerWrapper, Encoder
-from zeta.nn import PerceiverLayer
+from zeta.nn import PerceiverLayer, OutputHead
 
 
 class LayerNorm(nn.Module):
@@ -250,6 +250,9 @@ class VisualAdapter(nn.Module):
 
         # TODO: Add latent queries for the resampler
 
+        # Layernorm
+        self.norm = nn.LayerNorm(dim)
+
     def forward(self, text: Tensor, img: Tensor, *args, **kwargs):
         """
         Forward pass of the VisualAdapter module.
@@ -270,29 +273,13 @@ class VisualAdapter(nn.Module):
         )
 
         img = self.vit(img, return_embeddings=True)
+        img = self.norm(img)
 
         # Perceiver resampler
         resampler = self.resampler(learnable_queries, text, img)
+        resampler = self.norm(resampler)
 
         return resampler
-
-
-# x = torch.randn(1, 32, 512)
-# img = torch.randn(1, 3, 224, 224)
-
-# model = VisualAdapter(
-#     dim=512,
-#     depth=6,
-#     heads=8,
-#     dropout=0.1,
-#     dim_head=64,
-#     ff_mult=4,
-#     image_size=224,
-#     patch_size=16,
-# )
-
-# out = model(x, img)
-# print(out.shape)
 
 
 class TinyPalm2(nn.Module):
@@ -338,8 +325,6 @@ class TinyPalm2(nn.Module):
                         dim_head=dim_head,
                         heads=heads,
                         ff_mult=ff_mult,
-                        *args,
-                        **kwargs,
                     )
                 )
                 for _ in range(depth)
@@ -351,9 +336,9 @@ class TinyPalm2(nn.Module):
         )
 
         # They used embedding weight not tied projection out to logits
-        self.net[-1].weight = self.net[0].weight
+        # self.net[-1].weight = self.net[0].weight
 
-        nn.init.normal_(self.net[0].weight, std=0.02)
+        # nn.init.normal_(self.net[0].weight, std=0.02)
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -409,3 +394,150 @@ def LargePaLM(
 
     nn.init.normal_(net[0].weight, std=0.02)
     return net
+
+
+class PaLM2VAdapter(nn.Module):
+    """
+    PaLM2VAdapter is a PyTorch module that combines text and image inputs using the PaLM2 model.
+
+    Args:
+        tiny_dim (int): The dimension of the tiny PaLM model.
+        dim (int): The dimension of the PaLM model.
+        num_tokens (int): The number of tokens in the input text.
+        seq_length (int): The sequence length of the input text.
+        depth (int): The depth of the PaLM model.
+        heads (int): The number of attention heads in the PaLM model.
+        dropout (float, optional): The dropout rate. Defaults to 0.1.
+        dim_head (int, optional): The dimension of each attention head. Defaults to 64.
+        ff_mult (int, optional): The multiplier for the feed-forward layer dimension. Defaults to 4.
+        image_size (int, optional): The size of the input image. Defaults to 224.
+        patch_size (int, optional): The size of each image patch. Defaults to 16.
+        visual_adapter_depth (int, optional): The depth of the visual adapter. Defaults to 6.
+        visual_adapter_heads (int, optional): The number of attention heads in the visual adapter. Defaults to 8.
+        tiny_palm_depth (int, optional): The depth of the tiny PaLM model. Defaults to 6.
+
+    Attributes:
+        tiny_dim (int): The dimension of the tiny PaLM model.
+        dim (int): The dimension of the PaLM model.
+        num_tokens (int): The number of tokens in the input text.
+        seq_length (int): The sequence length of the input text.
+        depth (int): The depth of the PaLM model.
+        heads (int): The number of attention heads in the PaLM model.
+        dropout (float): The dropout rate.
+        dim_head (int): The dimension of each attention head.
+        ff_mult (int): The multiplier for the feed-forward layer dimension.
+        image_size (int): The size of the input image.
+        patch_size (int): The size of each image patch.
+        vision_encoder (VisualAdapter): The visual adapter module.
+        tiny_palm (TinyPalm2): The tiny PaLM model.
+        from_small_to_large (nn.Linear): The linear projection from the small PaLM model to the large PaLM model.
+        large_palm (TinyPalm2): The large PaLM model.
+        output_head (OutputHead): The output head module.
+        embed (nn.Embedding): The embedding layer for the input text.
+
+    Methods:
+        forward(text, img, *args, **kwargs): Forward pass of the PaLM2VAdapter module.
+
+    """
+
+    def __init__(
+        self,
+        tiny_dim: int,
+        dim: int,
+        num_tokens: int,
+        seq_length: int,
+        depth: int,
+        heads: int,
+        dropout: float = 0.1,
+        dim_head: int = 64,
+        ff_mult: int = 4,
+        image_size: int = 224,
+        patch_size: int = 16,
+        visual_adapter_depth: int = 6,
+        visual_adapter_heads: int = 8,
+        tiny_palm_depth: int = 6,
+        *args,
+        **kwargs,
+    ):
+        super().__init__()
+        self.tiny_dim = tiny_dim
+        self.dim = dim
+        self.num_tokens = num_tokens
+        self.seq_length = seq_length
+        self.depth = depth
+        self.heads = heads
+        self.dropout = dropout
+        self.dim_head = dim_head
+        self.ff_mult = ff_mult
+        self.image_size = image_size
+        self.patch_size = patch_size
+
+        self.vision_encoder = VisualAdapter(
+            dim,
+            visual_adapter_depth,
+            visual_adapter_heads,
+            dropout,
+            dim_head,
+            ff_mult,
+            image_size,
+            patch_size,
+            *args,
+            **kwargs,
+        )
+
+        # Tiny PALM
+        self.tiny_palm = TinyPalm2(
+            tiny_dim,
+            tiny_palm_depth,
+            dim_head,
+            heads,
+            ff_mult,
+            *args,
+            **kwargs,
+        )
+
+        # Large palm projection
+        self.from_small_to_large = nn.Linear(
+            tiny_dim,
+            dim,
+            bias=False,
+        )
+
+        # Large palm
+        self.large_palm = TinyPalm2(
+            dim, depth, dim_head, heads, ff_mult, *args, **kwargs
+        )
+
+        # Output heads
+        self.output_head = OutputHead(
+            dim,
+            1,
+        )
+
+        # Embedding
+        self.embed = nn.Embedding(num_tokens, dim)
+
+    def forward(self, text: Tensor, img: Tensor, *args, **kwargs):
+        # Embed the text
+        text = self.embed(text)
+
+        # Pass the text through the large PaLM model
+        text = self.large_palm(text)
+
+        # Pass the text and image through the vision encoder
+        img = self.vision_encoder(text, img)
+
+        # Pass the image through the tiny PaLM model
+        img = self.tiny_palm(img)
+
+        # Resample the image from small to large
+        img = self.from_small_to_large(img)
+
+        # Concatenate the image and text
+        both = torch.cat([img, text], dim=1)
+
+        # Pass the concatenated input through the large PaLM model
+        out = self.large_palm(both)
+
+        # Return the output of the output head
+        return self.output_head(out)
