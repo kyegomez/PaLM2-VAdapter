@@ -55,3 +55,6 @@ MIT
     primaryClass={cs.CV}
 }
 ```
+
+## Todo
+- [ ] Add video processing for every frame

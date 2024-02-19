@@ -526,9 +526,9 @@ class PaLM2VAdapter(nn.Module):
         **kwargs,
     ):
         # TODO: Add video processing
-        if video:
+        if video is not None:
             # Convert the video into images for every frame
-            img = rearrange(video, "b f c h w -> (b f) c h w")
+            img = rearrange(video, "b c f h w -> (b f) c h w")
 
         # Embed the text
         text = self.embed(text)
