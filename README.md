@@ -6,7 +6,7 @@ Implementation of "PaLM2-VAdapter:" from the multi-modal model paper: "PaLM2-VAd
 This model uses a perceiver resampler with a depth of 1 + a tiny palm to efficiently learn the features behind the images and then map them  to the same space as the big model.
 
 ## install
-`$ pip install palm2-vadapter`
+`$ pip install palm-vadapter`
 
 
 ## usage
