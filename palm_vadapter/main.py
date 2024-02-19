@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor, einsum, nn
-from zeta.nn import OutputHead, PerceiverLayer
+from zeta.nn import OutputHead, PerceiverLayer, video_to_text
 from zeta.structs import Encoder, ViTransformerWrapper
 
 
@@ -521,12 +521,15 @@ class PaLM2VAdapter(nn.Module):
         self,
         text: Tensor,
         img: Tensor,
-        video: Tensor,
+        video: Tensor = None,
         *args,
         **kwargs,
     ):
         # TODO: Add video processing
-        
+        if video:
+            # Convert the video into images for every frame
+            img = rearrange(video, "b f c h w -> (b f) c h w")
+            
         # Embed the text
         text = self.embed(text)
 
