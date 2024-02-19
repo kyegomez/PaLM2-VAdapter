@@ -1,9 +1,9 @@
 import torch
 import torch.nn.functional as F
 from einops import rearrange
-from torch import einsum, nn, Tensor
-from zeta.structs import ViTransformerWrapper, Encoder
-from zeta.nn import PerceiverLayer, OutputHead
+from torch import Tensor, einsum, nn
+from zeta.nn import OutputHead, PerceiverLayer
+from zeta.structs import Encoder, ViTransformerWrapper
 
 
 class LayerNorm(nn.Module):
@@ -517,7 +517,7 @@ class PaLM2VAdapter(nn.Module):
         # Embedding
         self.embed = nn.Embedding(num_tokens, dim)
 
-    def forward(self, text: Tensor, img: Tensor, *args, **kwargs):
+    def forward(self, text: Tensor, igmg: Tensor, *args, **kwargs):
         # Embed the text
         text = self.embed(text)
 
